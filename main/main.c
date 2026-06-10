@@ -1,12 +1,10 @@
 #include <stdio.h>
 #include "esp_err.h"
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include "nvs_flash.h"
+#include "esp_netif.h"
 #include "wlan.h"
 #include "mqttcomm.h"
-
-static const char* TAG = "main";
+#include "tire_temp.h"
 
 void app_main(void)
 {
@@ -15,4 +13,5 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     wlan_start();
     mqttcomm_start();
+    tire_temp_start();
 }
