@@ -80,7 +80,7 @@ static void mlx90640_calculate_to(uint16_t *frameData, const mlx90640_params_t *
 static float mlx90640_get_vdd(uint16_t *frameData, const mlx90640_params_t *params);
 static float mlx90640_get_ta(uint16_t *frameData, const mlx90640_params_t *params);
 static int mlx90640_is_pixel_bad(uint16_t pixel, const mlx90640_params_t *params);
-static void mlx90640_bad_pixels_correction(uint16_t *pixels, float *to, int mode, mlx90640_params_t *params);
+static void mlx90640_bad_pixels_correction(uint16_t *pixels, float *to, int mode, const mlx90640_params_t *params);
 static int mlx90640_validate_aux_data(uint16_t *auxData);
 static int mlx90640_validate_frame_data(uint16_t *frameData);
 
@@ -170,7 +170,7 @@ esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS],
     for (int subpage_read = 0; subpage_read < 2; subpage_read++) {
         /* Wait for new data (data-ready bit set) */
         bool ready = false;
-        for (int attempt = 0; attempt < 100; attempt++) {
+        for (int attempt = 0; attempt < 150; attempt++) {
             err = mlx90640_i2c_read(s, MLX90640_STATUS_REG, 1, &statusRegister);
             if (err != ESP_OK) {
                 return err;
@@ -824,7 +824,7 @@ static int mlx90640_validate_frame_data(uint16_t *frameData)
     return 0;
 }
 
-static void mlx90640_bad_pixels_correction(uint16_t *pixels, float *to, int mode, mlx90640_params_t *params)
+static void mlx90640_bad_pixels_correction(uint16_t *pixels, float *to, int mode, const mlx90640_params_t *params)
 {
     float ap[4];
     uint16_t pix = 0;

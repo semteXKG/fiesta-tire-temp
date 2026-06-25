@@ -73,12 +73,14 @@ typedef struct {
     mlx90640_params_t params;
 } mlx90640_t;
 
-/* Attach the sensor at `addr` to an existing I2C master bus and read EEPROM params. */
+/* Attach the sensor at `addr` to an existing I2C master bus and read EEPROM params.
+   This driver is NOT reentrant: only one task may call it at a time. */
 esp_err_t mlx90640_init(i2c_master_bus_handle_t bus, uint8_t addr, mlx90640_t *out);
 
 /* Read one full frame and convert to Celsius in `out_temps[768]`.
    emissivity: surface emissivity (0.0..1.0], e.g. 0.95 for rubber.
-   reflected_temp_c: reflected ambient temperature in Celsius. */
+   reflected_temp_c: reflected ambient temperature in Celsius.
+   This driver is NOT reentrant: only one task may call it at a time. */
 esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS],
                                float emissivity, float reflected_temp_c);
 
