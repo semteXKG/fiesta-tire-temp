@@ -133,6 +133,9 @@ esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS],
     if (s == NULL || out_temps == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
+    if (emissivity <= 0.0f || emissivity > 1.0f || reflected_temp_c < -100.0f || reflected_temp_c > 200.0f) {
+        return ESP_ERR_INVALID_ARG;
+    }
 
     static uint16_t frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM + 2];
     uint16_t statusRegister;
@@ -142,6 +145,7 @@ esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS],
     memset(out_temps, 0, MLX90640_PIXELS * sizeof(float));
 
     int first_subpage = -1;
+    uint8_t frame_mode = 0;
 
     /* Read both subpages to fill the full 32x24 matrix */
     for (int subpage_read = 0; subpage_read < 2; subpage_read++) {
@@ -182,6 +186,7 @@ esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS],
             return err;
         }
         frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM] = controlRegister1;
+        frame_mode = (uint8_t)((controlRegister1 & MLX90640_CTRL_MEAS_MODE_MASK) >> MLX90640_CTRL_MEAS_MODE_SHIFT);
         uint16_t subpage = statusRegister & MLX90640_STAT_FRAME_MASK;
         frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM + 1] = subpage;
 
@@ -202,8 +207,8 @@ esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS],
     }
 
     /* Replace deviating pixels with neighbor averages */
-    mlx90640_bad_pixels_correction(s->params.brokenPixels, out_temps, 1, &s->params);
-    mlx90640_bad_pixels_correction(s->params.outlierPixels, out_temps, 1, &s->params);
+    mlx90640_bad_pixels_correction(s->params.brokenPixels, out_temps, frame_mode, &s->params);
+    mlx90640_bad_pixels_correction(s->params.outlierPixels, out_temps, frame_mode, &s->params);
 
     return ESP_OK;
 }
