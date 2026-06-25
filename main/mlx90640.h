@@ -62,8 +62,11 @@ typedef struct {
 /* Attach the sensor at `addr` to an existing I2C master bus and read EEPROM params. */
 esp_err_t mlx90640_init(i2c_master_bus_handle_t bus, uint8_t addr, mlx90640_t *out);
 
-/* Read one full frame and convert to Celsius in `out_temps[768]`. */
-esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS]);
+/* Read one full frame and convert to Celsius in `out_temps[768]`.
+   emissivity: surface emissivity (0.0..1.0, e.g. 0.95 for rubber).
+   reflected_temp_c: reflected ambient temperature in Celsius. */
+esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS],
+                               float emissivity, float reflected_temp_c);
 
 #ifdef __cplusplus
 }

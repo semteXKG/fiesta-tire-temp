@@ -64,6 +64,8 @@ static int mlx90640_extract_parameters(uint16_t *eeData, mlx90640_params_t *mlx9
 static void mlx90640_calculate_to(uint16_t *frameData, const mlx90640_params_t *params, float emissivity, float tr, float *result);
 static float mlx90640_get_vdd(uint16_t *frameData, const mlx90640_params_t *params);
 static float mlx90640_get_ta(uint16_t *frameData, const mlx90640_params_t *params);
+static int mlx90640_is_pixel_bad(uint16_t pixel, const mlx90640_params_t *params);
+static void mlx90640_bad_pixels_correction(uint16_t *pixels, float *to, int mode, mlx90640_params_t *params);
 
 /*------------------------ Public API ------------------------*/
 
@@ -125,7 +127,8 @@ esp_err_t mlx90640_init(i2c_master_bus_handle_t bus, uint8_t addr, mlx90640_t *o
     return ESP_OK;
 }
 
-esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS])
+esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS],
+                               float emissivity, float reflected_temp_c)
 {
     if (s == NULL || out_temps == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -195,8 +198,12 @@ esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS])
             return err;
         }
 
-        mlx90640_calculate_to(frameData, &s->params, 0.95f, 25.0f, out_temps);
+        mlx90640_calculate_to(frameData, &s->params, emissivity, reflected_temp_c, out_temps);
     }
+
+    /* Replace deviating pixels with neighbor averages */
+    mlx90640_bad_pixels_correction(s->params.brokenPixels, out_temps, 1, &s->params);
+    mlx90640_bad_pixels_correction(s->params.outlierPixels, out_temps, 1, &s->params);
 
     return ESP_OK;
 }
@@ -737,6 +744,90 @@ static int mlx90640_extract_parameters(uint16_t *eeData, mlx90640_params_t *mlx9
     mlx90640_extract_kv_pixel_parameters(eeData, mlx90640);
     mlx90640_extract_cilc_parameters(eeData, mlx90640);
     return mlx90640_extract_deviating_pixels(eeData, mlx90640);
+}
+
+static int mlx90640_is_pixel_bad(uint16_t pixel, const mlx90640_params_t *params)
+{
+    for (int i = 0; i < 5; i++) {
+        if (pixel == params->outlierPixels[i] || pixel == params->brokenPixels[i]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void mlx90640_bad_pixels_correction(uint16_t *pixels, float *to, int mode, mlx90640_params_t *params)
+{
+    float ap[4];
+    uint16_t pix = 0;
+
+    while (pixels[pix] != 0xFFFF) {
+        uint8_t line = pixels[pix] >> 5;
+        uint8_t column = (uint8_t)(pixels[pix] - (line << 5));
+
+        if (mode == 1) {
+            if (line == 0) {
+                if (column == 0) {
+                    to[pixels[pix]] = to[33];
+                } else if (column == 31) {
+                    to[pixels[pix]] = to[62];
+                } else {
+                    to[pixels[pix]] = (to[pixels[pix] + 31] + to[pixels[pix] + 33]) / 2.0f;
+                }
+            } else if (line == 23) {
+                if (column == 0) {
+                    to[pixels[pix]] = to[705];
+                } else if (column == 31) {
+                    to[pixels[pix]] = to[734];
+                } else {
+                    to[pixels[pix]] = (to[pixels[pix] - 33] + to[pixels[pix] - 31]) / 2.0f;
+                }
+            } else if (column == 0) {
+                to[pixels[pix]] = (to[pixels[pix] - 31] + to[pixels[pix] + 33]) / 2.0f;
+            } else if (column == 31) {
+                to[pixels[pix]] = (to[pixels[pix] - 33] + to[pixels[pix] + 31]) / 2.0f;
+            } else {
+                ap[0] = to[pixels[pix] - 33];
+                ap[1] = to[pixels[pix] - 31];
+                ap[2] = to[pixels[pix] + 31];
+                ap[3] = to[pixels[pix] + 33];
+
+                /* simple median of four */
+                for (int i = 0; i < 3; i++) {
+                    for (int j = i + 1; j < 4; j++) {
+                        if (ap[j] < ap[i]) {
+                            float tmp = ap[i];
+                            ap[i] = ap[j];
+                            ap[j] = tmp;
+                        }
+                    }
+                }
+                to[pixels[pix]] = (ap[1] + ap[2]) / 2.0f;
+            }
+        } else {
+            if (column == 0) {
+                to[pixels[pix]] = to[pixels[pix] + 1];
+            } else if (column == 1 || column == 30) {
+                to[pixels[pix]] = (to[pixels[pix] - 1] + to[pixels[pix] + 1]) / 2.0f;
+            } else if (column == 31) {
+                to[pixels[pix]] = to[pixels[pix] - 1];
+            } else {
+                if (mlx90640_is_pixel_bad(pixels[pix] - 2, params) == 0 &&
+                    mlx90640_is_pixel_bad(pixels[pix] + 2, params) == 0) {
+                    ap[0] = to[pixels[pix] + 1] - to[pixels[pix] + 2];
+                    ap[1] = to[pixels[pix] - 1] - to[pixels[pix] - 2];
+                    if (fabsf(ap[0]) > fabsf(ap[1])) {
+                        to[pixels[pix]] = to[pixels[pix] - 1] + ap[1];
+                    } else {
+                        to[pixels[pix]] = to[pixels[pix] + 1] + ap[0];
+                    }
+                } else {
+                    to[pixels[pix]] = (to[pixels[pix] - 1] + to[pixels[pix] + 1]) / 2.0f;
+                }
+            }
+        }
+        pix++;
+    }
 }
 
 /*------------------------ Temperature calculation (Melexis) ------------------------*/

@@ -10,6 +10,8 @@
 #define I2C_SCL_GPIO     22
 #define POLL_PERIOD_MS   1000
 #define SENSOR_ADDR      0x33
+#define EMISSIVITY       0.95f
+#define REFLECTED_TEMP_C 25.0f
 
 static const char *TAG = "tire_temp";
 
@@ -28,7 +30,7 @@ static void tire_temp_task(void *pv)
 
     static mlx90640_t sensor;
     static float matrix[MLX90640_PIXELS];
-    int frame_count = 0;
+    static int frame_count = 0;
 
     while (1) {
         esp_err_t err = mlx90640_init(bus, SENSOR_ADDR, &sensor);
@@ -43,7 +45,7 @@ static void tire_temp_task(void *pv)
         while (1) {
             err = ESP_OK;
             for (int retry = 0; retry < 3; retry++) {
-                err = mlx90640_read_frame(&sensor, matrix);
+                err = mlx90640_read_frame(&sensor, matrix, EMISSIVITY, REFLECTED_TEMP_C);
                 if (err == ESP_OK) {
                     break;
                 }
