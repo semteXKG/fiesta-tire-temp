@@ -60,7 +60,7 @@ static const char *TAG = "mlx90640";
 /* Internal helpers */
 static esp_err_t mlx90640_i2c_read(mlx90640_t *s, uint16_t start_addr, uint16_t nwords, uint16_t *data);
 static esp_err_t mlx90640_i2c_write(mlx90640_t *s, uint16_t write_addr, uint16_t data);
-static void mlx90640_extract_parameters(uint16_t *eeData, mlx90640_params_t *mlx90640);
+static int mlx90640_extract_parameters(uint16_t *eeData, mlx90640_params_t *mlx90640);
 static void mlx90640_calculate_to(uint16_t *frameData, const mlx90640_params_t *params, float emissivity, float tr, float *result);
 static float mlx90640_get_vdd(uint16_t *frameData, const mlx90640_params_t *params);
 static float mlx90640_get_ta(uint16_t *frameData, const mlx90640_params_t *params);
@@ -86,7 +86,7 @@ esp_err_t mlx90640_init(i2c_master_bus_handle_t bus, uint8_t addr, mlx90640_t *o
     }
     out->addr = addr;
 
-    uint16_t eeData[MLX90640_EEPROM_DUMP_NUM];
+    static uint16_t eeData[MLX90640_EEPROM_DUMP_NUM];
     err = mlx90640_i2c_read(out, MLX90640_EEPROM_START_ADDRESS, MLX90640_EEPROM_DUMP_NUM, eeData);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "EEPROM read failed: %s", esp_err_to_name(err));
@@ -99,7 +99,17 @@ esp_err_t mlx90640_init(i2c_master_bus_handle_t bus, uint8_t addr, mlx90640_t *o
         eeData[i] = (eeData[i] << 8) | (eeData[i] >> 8);
     }
 
-    mlx90640_extract_parameters(eeData, &out->params);
+    /* Minimal EEPROM sanity check */
+    if (eeData[0x0A] == 0x0000 || eeData[0x0A] == 0xFFFF) {
+        ESP_LOGE(TAG, "EEPROM sanity check failed (word 0x0A = 0x%04X)", eeData[0x0A]);
+        i2c_master_bus_rm_device(out->dev);
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    int warn = mlx90640_extract_parameters(eeData, &out->params);
+    if (warn != 0) {
+        ESP_LOGW(TAG, "EEPROM deviating-pixel warning: %d", warn);
+    }
 
     /* Set refresh rate to 1 Hz */
     uint16_t ctrl;
@@ -122,56 +132,67 @@ esp_err_t mlx90640_init(i2c_master_bus_handle_t bus, uint8_t addr, mlx90640_t *o
 
 esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS])
 {
-    if (out_temps == NULL) {
+    if (s == NULL || out_temps == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    uint16_t frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM + 2];
+    static uint16_t frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM + 2];
     uint16_t statusRegister;
     uint16_t controlRegister1;
     esp_err_t err;
 
-    /* Wait for new data (data-ready bit set) */
-    for (int attempt = 0; attempt < 100; attempt++) {
-        err = mlx90640_i2c_read(s, MLX90640_STATUS_REG, 1, &statusRegister);
+    memset(out_temps, 0, MLX90640_PIXELS * sizeof(float));
+
+    /* Read both subpages to fill the full 32x24 matrix */
+    for (int subpage_read = 0; subpage_read < 2; subpage_read++) {
+        /* Wait for new data (data-ready bit set) */
+        bool ready = false;
+        for (int attempt = 0; attempt < 100; attempt++) {
+            err = mlx90640_i2c_read(s, MLX90640_STATUS_REG, 1, &statusRegister);
+            if (err != ESP_OK) {
+                return err;
+            }
+            if (statusRegister & MLX90640_STAT_DATA_READY_MASK) {
+                ready = true;
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        if (!ready) {
+            ESP_LOGE(TAG, "data-ready timeout");
+            return ESP_ERR_TIMEOUT;
+        }
+
+        /* Read pixel and auxiliary data */
+        err = mlx90640_i2c_read(s, MLX90640_PIXEL_DATA_START_ADDRESS, MLX90640_PIXEL_NUM, frameData);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "pixel data read failed: %s", esp_err_to_name(err));
+            return err;
+        }
+
+        err = mlx90640_i2c_read(s, MLX90640_AUX_DATA_START_ADDRESS, MLX90640_AUX_NUM,
+                                &frameData[MLX90640_PIXEL_NUM]);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "aux data read failed: %s", esp_err_to_name(err));
+            return err;
+        }
+
+        err = mlx90640_i2c_read(s, MLX90640_CTRL_REG, 1, &controlRegister1);
         if (err != ESP_OK) {
             return err;
         }
-        if (statusRegister & MLX90640_STAT_DATA_READY_MASK) {
-            break;
+        frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM] = controlRegister1;
+        frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM + 1] = statusRegister & MLX90640_STAT_FRAME_MASK;
+
+        /* Clear new-data bit after reading the frame */
+        err = mlx90640_i2c_write(s, MLX90640_STATUS_REG, MLX90640_INIT_STATUS_VALUE);
+        if (err != ESP_OK) {
+            return err;
         }
-        vTaskDelay(pdMS_TO_TICKS(10));
+
+        mlx90640_calculate_to(frameData, &s->params, 0.95f, 25.0f, out_temps);
     }
 
-    /* Clear new-data bit */
-    err = mlx90640_i2c_write(s, MLX90640_STATUS_REG, MLX90640_INIT_STATUS_VALUE);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    /* Read pixel and auxiliary data */
-    err = mlx90640_i2c_read(s, MLX90640_PIXEL_DATA_START_ADDRESS, MLX90640_PIXEL_NUM, frameData);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "pixel data read failed: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    err = mlx90640_i2c_read(s, MLX90640_AUX_DATA_START_ADDRESS, MLX90640_AUX_NUM,
-                            &frameData[MLX90640_PIXEL_NUM]);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "aux data read failed: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    err = mlx90640_i2c_read(s, MLX90640_CTRL_REG, 1, &controlRegister1);
-    if (err != ESP_OK) {
-        return err;
-    }
-    frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM] = controlRegister1;
-
-    frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM + 1] = statusRegister & MLX90640_STAT_FRAME_MASK;
-
-    mlx90640_calculate_to(frameData, &s->params, 0.95f, 25.0f, out_temps);
     return ESP_OK;
 }
 
@@ -698,7 +719,7 @@ static int mlx90640_extract_deviating_pixels(uint16_t *eeData, mlx90640_params_t
     return warn;
 }
 
-static void mlx90640_extract_parameters(uint16_t *eeData, mlx90640_params_t *mlx90640)
+static int mlx90640_extract_parameters(uint16_t *eeData, mlx90640_params_t *mlx90640)
 {
     mlx90640_extract_vdd_parameters(eeData, mlx90640);
     mlx90640_extract_ptat_parameters(eeData, mlx90640);
@@ -713,7 +734,7 @@ static void mlx90640_extract_parameters(uint16_t *eeData, mlx90640_params_t *mlx
     mlx90640_extract_kta_pixel_parameters(eeData, mlx90640);
     mlx90640_extract_kv_pixel_parameters(eeData, mlx90640);
     mlx90640_extract_cilc_parameters(eeData, mlx90640);
-    mlx90640_extract_deviating_pixels(eeData, mlx90640);
+    return mlx90640_extract_deviating_pixels(eeData, mlx90640);
 }
 
 /*------------------------ Temperature calculation (Melexis) ------------------------*/

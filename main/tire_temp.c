@@ -26,8 +26,8 @@ static void tire_temp_task(void *pv)
     i2c_master_bus_handle_t bus;
     ESP_ERROR_CHECK(i2c_new_master_bus(&bus_cfg, &bus));
 
-    mlx90640_t sensor;
-    float matrix[MLX90640_PIXELS];
+    static mlx90640_t sensor;
+    static float matrix[MLX90640_PIXELS];
     int frame_count = 0;
 
     while (1) {
@@ -41,16 +41,24 @@ static void tire_temp_task(void *pv)
         ESP_LOGI(TAG, "MLX90640 attached @ 0x%02X", SENSOR_ADDR);
 
         while (1) {
-            err = mlx90640_read_frame(&sensor, matrix);
+            err = ESP_OK;
+            for (int retry = 0; retry < 3; retry++) {
+                err = mlx90640_read_frame(&sensor, matrix);
+                if (err == ESP_OK) {
+                    break;
+                }
+                ESP_LOGW(TAG, "frame read failed (attempt %d): %s", retry + 1, esp_err_to_name(err));
+                vTaskDelay(pdMS_TO_TICKS(100));
+            }
             if (err != ESP_OK) {
-                ESP_LOGE(TAG, "frame read failed: %s", esp_err_to_name(err));
+                ESP_LOGE(TAG, "frame read failed after retries: %s", esp_err_to_name(err));
                 break;
             }
 
             ESP_LOGI(TAG, "frame %d", frame_count++);
             for (int row = 0; row < MLX90640_ROWS; row++) {
                 char line[256];
-                int pos = snprintf(line, sizeof(line), "mlx90640: row %02d:", row);
+                int pos = snprintf(line, sizeof(line), "row %02d:", row);
                 for (int col = 0; col < MLX90640_COLS && pos < (int)sizeof(line) - 8; col++) {
                     pos += snprintf(line + pos, sizeof(line) - pos, " %.1f",
                                     matrix[row * MLX90640_COLS + col]);
