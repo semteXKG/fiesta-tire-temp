@@ -1,0 +1,2 @@
+# Use the project's custom partition table on fresh clones
+CONFIG_PARTITION_TABLE_CUSTOM=y
