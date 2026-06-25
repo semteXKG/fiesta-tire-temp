@@ -94,11 +94,6 @@ esp_err_t mlx90640_init(i2c_master_bus_handle_t bus, uint8_t addr, mlx90640_t *o
         return err;
     }
 
-    /* EEPROM is big-endian; ESP32 is little-endian. Swap each word. */
-    for (int i = 0; i < MLX90640_EEPROM_DUMP_NUM; i++) {
-        eeData[i] = (eeData[i] << 8) | (eeData[i] >> 8);
-    }
-
     /* Minimal EEPROM sanity check */
     if (eeData[0x0A] == 0x0000 || eeData[0x0A] == 0xFFFF) {
         ESP_LOGE(TAG, "EEPROM sanity check failed (word 0x0A = 0x%04X)", eeData[0x0A]);
@@ -143,6 +138,8 @@ esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS])
 
     memset(out_temps, 0, MLX90640_PIXELS * sizeof(float));
 
+    int first_subpage = -1;
+
     /* Read both subpages to fill the full 32x24 matrix */
     for (int subpage_read = 0; subpage_read < 2; subpage_read++) {
         /* Wait for new data (data-ready bit set) */
@@ -182,7 +179,15 @@ esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS])
             return err;
         }
         frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM] = controlRegister1;
-        frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM + 1] = statusRegister & MLX90640_STAT_FRAME_MASK;
+        uint16_t subpage = statusRegister & MLX90640_STAT_FRAME_MASK;
+        frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM + 1] = subpage;
+
+        if (first_subpage == -1) {
+            first_subpage = (int)subpage;
+        } else if ((int)subpage == first_subpage) {
+            ESP_LOGE(TAG, "subpage did not advance (stuck at %d)", first_subpage);
+            return ESP_ERR_INVALID_RESPONSE;
+        }
 
         /* Clear new-data bit after reading the frame */
         err = mlx90640_i2c_write(s, MLX90640_STATUS_REG, MLX90640_INIT_STATUS_VALUE);
@@ -202,18 +207,15 @@ static esp_err_t mlx90640_i2c_read(mlx90640_t *s, uint16_t start_addr, uint16_t 
 {
     uint8_t cmd[2] = { (uint8_t)(start_addr >> 8), (uint8_t)(start_addr & 0xFF) };
     size_t len = nwords * 2;
-    uint8_t *rx = malloc(len);
-    if (rx == NULL) {
-        return ESP_ERR_NO_MEM;
-    }
 
-    esp_err_t err = i2c_master_transmit_receive(s->dev, cmd, sizeof(cmd), rx, len, I2C_TIMEOUT_MS);
+    esp_err_t err = i2c_master_transmit_receive(s->dev, cmd, sizeof(cmd),
+                                                (uint8_t *)data, len, I2C_TIMEOUT_MS);
     if (err == ESP_OK) {
+        /* Sensor sends big-endian 16-bit words; swap in place for little-endian host. */
         for (size_t i = 0; i < nwords; i++) {
-            data[i] = ((uint16_t)rx[2 * i] << 8) | rx[2 * i + 1];
+            data[i] = (data[i] << 8) | (data[i] >> 8);
         }
     }
-    free(rx);
     return err;
 }
 
