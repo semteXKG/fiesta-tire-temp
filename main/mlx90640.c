@@ -624,8 +624,7 @@ static void mlx90640_extract_cilc_parameters(uint16_t *eeData, mlx90640_params_t
     float ilChessC[3];
     uint8_t calibrationModeEE;
 
-    calibrationModeEE = (uint8_t)((eeData[10] & 0x0800) >> 4);
-    calibrationModeEE = (uint8_t)(calibrationModeEE ^ 0x80);
+    calibrationModeEE = (uint8_t)((eeData[10] & 0x0800) >> 11);
 
     ilChessC[0] = (float)(eeData[53] & 0x003F);
     if (ilChessC[0] > 31.0f) {
