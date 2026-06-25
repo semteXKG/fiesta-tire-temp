@@ -147,7 +147,8 @@ esp_err_t mlx90640_init(i2c_master_bus_handle_t bus, uint8_t addr, mlx90640_t *o
 }
 
 esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS],
-                               float emissivity, float reflected_temp_c)
+                               float emissivity, float reflected_temp_c,
+                               float *out_ta)
 {
     if (s == NULL || out_temps == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -237,6 +238,10 @@ esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS],
     /* Replace deviating pixels with neighbor averages */
     mlx90640_bad_pixels_correction(s->params.brokenPixels, out_temps, frame_mode, &s->params);
     mlx90640_bad_pixels_correction(s->params.outlierPixels, out_temps, frame_mode, &s->params);
+
+    if (out_ta != NULL) {
+        *out_ta = mlx90640_get_ta(frameData, &s->params);
+    }
 
     return ESP_OK;
 }

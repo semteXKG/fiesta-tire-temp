@@ -44,8 +44,9 @@ static void tire_temp_task(void *pv)
 
         while (1) {
             err = ESP_OK;
+            float ta = 0.0f;
             for (int retry = 0; retry < 3; retry++) {
-                err = mlx90640_read_frame(&sensor, matrix, EMISSIVITY, REFLECTED_TEMP_C);
+                err = mlx90640_read_frame(&sensor, matrix, EMISSIVITY, REFLECTED_TEMP_C, &ta);
                 if (err == ESP_OK) {
                     break;
                 }
@@ -57,7 +58,17 @@ static void tire_temp_task(void *pv)
                 break;
             }
 
-            ESP_LOGI(TAG, "frame %d", frame_count++);
+            float min = matrix[0];
+            float max = matrix[0];
+            float sum = 0.0f;
+            for (int i = 0; i < MLX90640_PIXELS; i++) {
+                if (matrix[i] < min) min = matrix[i];
+                if (matrix[i] > max) max = matrix[i];
+                sum += matrix[i];
+            }
+            ESP_LOGI(TAG, "frame %d  Ta=%.1f  min=%.1f  max=%.1f  avg=%.1f",
+                     frame_count++, ta, min, max, sum / MLX90640_PIXELS);
+
             for (int row = 0; row < MLX90640_ROWS; row++) {
                 char line[256];
                 int pos = snprintf(line, sizeof(line), "row %02d:", row);
