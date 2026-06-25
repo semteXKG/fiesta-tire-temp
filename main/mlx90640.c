@@ -128,7 +128,7 @@ static void extract_parameters(uint16_t *eeData, mlx90640_t *p)
     p->kVdd = p->kVdd * 32;
 
     p->vdd25 = eeData[51] & 0x00FF;
-    p->vdd25 = ((p->vdd25 - 256) << 5) - 8192;
+    p->vdd25 = ((int16_t)(p->vdd25 - 256) * 32) - 8192;
 
     p->KvPTAT = (eeData[50] & 0xFC00) >> 10;
     if (p->KvPTAT > 31) {
@@ -153,9 +153,9 @@ static void extract_parameters(uint16_t *eeData, mlx90640_t *p)
     }
     p->alphaPTAT = p->alphaPTAT * powf(2.0f, (float)(eeData[16] & 0x0FFF));
 
-    p->gainEE = eeData[48];
-    if (p->gainEE > 32767) {
-        p->gainEE = p->gainEE - 65536;
+    {
+        uint16_t gain_raw = eeData[48];
+        p->gainEE = (gain_raw > 32767) ? (int16_t)(gain_raw - 65536) : (int16_t)gain_raw;
     }
 
     p->tgc = eeData[60] & 0x00FF;
@@ -163,18 +163,6 @@ static void extract_parameters(uint16_t *eeData, mlx90640_t *p)
         p->tgc = p->tgc - 256;
     }
     p->tgc = p->tgc / 32.0f;
-
-    p->cpKv = (eeData[52] & 0xFF00) >> 8;
-    if (p->cpKv > 127) {
-        p->cpKv = p->cpKv - 256;
-    }
-    p->cpKv = p->cpKv / 256.0f;
-
-    p->cpKta = eeData[52] & 0x00FF;
-    if (p->cpKta > 127) {
-        p->cpKta = p->cpKta - 256;
-    }
-    p->cpKta = p->cpKta / 2048.0f;
 
     resolutionEE = (eeData[56] & 0x3000) >> 12;
     p->resolutionEE = (uint8_t)resolutionEE;
