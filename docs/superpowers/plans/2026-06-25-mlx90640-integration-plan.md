@@ -161,6 +161,8 @@ git commit -m "feat: add mlx90640 public driver header"
 
 ### Task 3: Create `main/mlx90640.c` — I2C wrapper and EEPROM parameter extraction
 
+**Note:** During execution, the original simplified parameter-extraction code in this task was replaced with the official Melexis MLX90640 reference algorithm (Apache-2.0 licensed). The driver still exposes the same public API declared in `main/mlx90640.h`, but the internal calibration extraction and `CalculateTo` implementation now match the Melexis reference.
+
 **Files:**
 - Create: `main/mlx90640.c`
 
@@ -502,6 +504,8 @@ git commit -m "feat: add mlx90640 init and eeprom parameter extraction"
 ---
 
 ### Task 4: Add frame read and temperature calculation to `main/mlx90640.c`
+
+**Note:** As with Task 3, the temperature-calculation code was replaced with the official Melexis `CalculateTo` algorithm during execution.
 
 **Files:**
 - Modify: `main/mlx90640.c`
