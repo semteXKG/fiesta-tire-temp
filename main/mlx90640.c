@@ -1,8 +1,23 @@
 /*
  * MLX90640 thermal array driver for ESP-IDF (new i2c_master API)
  *
- * The temperature calculation algorithm is adapted from the Melexis
- * MLX90640 reference driver, used under the Apache License, Version 2.0.
+ * Copyright 2021 Melexis N.V.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * The temperature-calculation algorithm, EEPROM parameter extraction,
+ * and frame-validation routines are adapted from the Melexis MLX90640
+ * reference driver.
  */
 #include "mlx90640.h"
 #include "freertos/FreeRTOS.h"
@@ -66,6 +81,8 @@ static float mlx90640_get_vdd(uint16_t *frameData, const mlx90640_params_t *para
 static float mlx90640_get_ta(uint16_t *frameData, const mlx90640_params_t *params);
 static int mlx90640_is_pixel_bad(uint16_t pixel, const mlx90640_params_t *params);
 static void mlx90640_bad_pixels_correction(uint16_t *pixels, float *to, int mode, mlx90640_params_t *params);
+static int mlx90640_validate_aux_data(uint16_t *auxData);
+static int mlx90640_validate_frame_data(uint16_t *frameData);
 
 /*------------------------ Public API ------------------------*/
 
@@ -105,7 +122,9 @@ esp_err_t mlx90640_init(i2c_master_bus_handle_t bus, uint8_t addr, mlx90640_t *o
 
     int warn = mlx90640_extract_parameters(eeData, &out->params);
     if (warn != 0) {
-        ESP_LOGW(TAG, "EEPROM deviating-pixel warning: %d", warn);
+        ESP_LOGE(TAG, "EEPROM deviating-pixel error: %d", warn);
+        i2c_master_bus_rm_device(out->dev);
+        return ESP_ERR_INVALID_RESPONSE;
     }
 
     /* Set refresh rate to 1 Hz */
@@ -180,6 +199,10 @@ esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS],
             ESP_LOGE(TAG, "aux data read failed: %s", esp_err_to_name(err));
             return err;
         }
+        if (mlx90640_validate_aux_data(&frameData[MLX90640_PIXEL_NUM]) != 0) {
+            ESP_LOGE(TAG, "aux data validation failed");
+            return ESP_ERR_INVALID_RESPONSE;
+        }
 
         err = mlx90640_i2c_read(s, MLX90640_CTRL_REG, 1, &controlRegister1);
         if (err != ESP_OK) {
@@ -189,6 +212,11 @@ esp_err_t mlx90640_read_frame(mlx90640_t *s, float out_temps[MLX90640_PIXELS],
         frame_mode = (uint8_t)((controlRegister1 & MLX90640_CTRL_MEAS_MODE_MASK) >> MLX90640_CTRL_MEAS_MODE_SHIFT);
         uint16_t subpage = statusRegister & MLX90640_STAT_FRAME_MASK;
         frameData[MLX90640_PIXEL_NUM + MLX90640_AUX_NUM + 1] = subpage;
+
+        if (mlx90640_validate_frame_data(frameData) != 0) {
+            ESP_LOGE(TAG, "frame data validation failed");
+            return ESP_ERR_INVALID_RESPONSE;
+        }
 
         if (first_subpage == -1) {
             first_subpage = (int)subpage;
@@ -756,6 +784,42 @@ static int mlx90640_is_pixel_bad(uint16_t pixel, const mlx90640_params_t *params
         if (pixel == params->outlierPixels[i] || pixel == params->brokenPixels[i]) {
             return 1;
         }
+    }
+    return 0;
+}
+
+static int mlx90640_validate_aux_data(uint16_t *auxData)
+{
+    if (auxData[0] == 0x7FFF) return -1;
+    for (int i = 8; i < 19; i++) {
+        if (auxData[i] == 0x7FFF) return -1;
+    }
+    for (int i = 20; i < 23; i++) {
+        if (auxData[i] == 0x7FFF) return -1;
+    }
+    for (int i = 24; i < 33; i++) {
+        if (auxData[i] == 0x7FFF) return -1;
+    }
+    for (int i = 40; i < 51; i++) {
+        if (auxData[i] == 0x7FFF) return -1;
+    }
+    for (int i = 52; i < 55; i++) {
+        if (auxData[i] == 0x7FFF) return -1;
+    }
+    for (int i = 56; i < 64; i++) {
+        if (auxData[i] == 0x7FFF) return -1;
+    }
+    return 0;
+}
+
+static int mlx90640_validate_frame_data(uint16_t *frameData)
+{
+    uint8_t line = 0;
+    for (int i = 0; i < MLX90640_PIXELS; i += MLX90640_COLS) {
+        if ((frameData[i] == 0x7FFF) && (line % 2 == frameData[833])) {
+            return -1;
+        }
+        line++;
     }
     return 0;
 }
