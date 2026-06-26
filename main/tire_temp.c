@@ -42,8 +42,14 @@ static void tire_temp_task(void *pv)
 
         ESP_LOGI(TAG, "MLX90640 attached @ 0x%02X", SENSOR_ADDR);
 
+        /* Discard first frames after init to let the sensor thermally settle. */
+        float discard_ta;
+        for (int i = 0; i < 3; i++) {
+            mlx90640_read_frame(&sensor, matrix, EMISSIVITY, REFLECTED_TEMP_C, &discard_ta);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+
         while (1) {
-            err = ESP_OK;
             float ta = 0.0f;
             for (int retry = 0; retry < 3; retry++) {
                 err = mlx90640_read_frame(&sensor, matrix, EMISSIVITY, REFLECTED_TEMP_C, &ta);

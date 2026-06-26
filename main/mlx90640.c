@@ -299,7 +299,7 @@ static void mlx90640_extract_ptat_parameters(uint16_t *eeData, mlx90640_params_t
     mlx90640->KvPTAT = KvPTAT;
     mlx90640->KtPTAT = KtPTAT;
     mlx90640->vPTAT25 = eeData[49];
-    mlx90640->alphaPTAT = (float)((eeData[16] & MLX90640_NIBBLE4_MASK) >> 12) / POW2(14) + 8.0f;
+    mlx90640->alphaPTAT = (float)((eeData[16] & MLX90640_NIBBLE4_MASK) >> 12) / 4.0f + 8.0f;
 }
 
 static void mlx90640_extract_gain_parameters(uint16_t *eeData, mlx90640_params_t *mlx90640)
