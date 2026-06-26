@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-#define TIRE_THRESHOLD_OFFSET   5.0f
+#define TIRE_THRESHOLD_OFFSET   -8.0f
 #define TIRE_MIN_PIXELS         30
 
 typedef struct {
@@ -118,7 +118,7 @@ esp_err_t tire_segment_process(const float *temps, float ta, tire_segment_result
     memset(labels, 0, sizeof(labels));
 
     for (int i = 0; i < MLX90640_PIXELS; i++) {
-        mask[i] = temps[i] > thresh;
+        mask[i] = temps[i] < thresh;
     }
 
     int best_count = 0;
