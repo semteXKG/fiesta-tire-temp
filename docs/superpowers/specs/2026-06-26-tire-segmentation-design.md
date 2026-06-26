@@ -26,7 +26,7 @@ For each 1 Hz frame:
 
 1. **Temperature threshold**
    - Compute the 25th percentile (background) of the 768 pixel temperatures.
-   - Tire pixels are those at least `TIRE_THRESHOLD_OFFSET` °C above that percentile (default 5 °C). This adapts to ambient changes.
+   - Tire pixels are those whose temperature differs from that percentile by at least `TIRE_THRESHOLD_OFFSET` °C (default 5 °C). This adapts to ambient changes and detects both hot tires and cold test targets.
    - If fewer than `TIRE_MIN_PIXELS` (e.g., 30) pixels qualify, mark detection as failed.
 
 2. **Connected component**
@@ -95,6 +95,6 @@ If `detected` is false, the three temperature fields are omitted.
 
 | Symbol | Default | Description |
 |--------|---------|-------------|
-| `TIRE_THRESHOLD_OFFSET` | 5.0 °C | Pixels warmer than background + offset are considered tire |
+| `TIRE_THRESHOLD_OFFSET` | 5.0 °C | Pixels differing from background by more than offset are considered tire |
 | `TIRE_MIN_PIXELS` | 30 | Minimum pixels for a valid detection |
 | `TIRE_CONNECTIVITY` | 4 | Flood-fill connectivity |
