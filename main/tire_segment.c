@@ -112,13 +112,11 @@ esp_err_t tire_segment_process(const float *temps, float ta, tire_segment_result
 
     memcpy(sorted, temps, sizeof(sorted));
     float bg = percentile25(sorted, MLX90640_PIXELS);
-    float thresh = bg + TIRE_THRESHOLD_OFFSET;
-
     memset(mask, 0, sizeof(mask));
     memset(labels, 0, sizeof(labels));
 
     for (int i = 0; i < MLX90640_PIXELS; i++) {
-        mask[i] = temps[i] > thresh;
+        mask[i] = fabsf(temps[i] - bg) > TIRE_THRESHOLD_OFFSET;
     }
 
     int best_count = 0;
