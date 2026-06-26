@@ -1,7 +1,5 @@
 #include "tire_segment.h"
 #include "mlx90640.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 #include <math.h>
 #include <string.h>
@@ -219,12 +217,12 @@ int tire_segment_json(const tire_segment_result_t *r, char *buf, size_t buflen)
     if (r->detected) {
         return snprintf(buf, buflen,
                         "{\"ts\":%u,\"ta\":%.1f,\"outside\":%.1f,\"center\":%.1f,\"inside\":%.1f,\"detected\":true,\"pixels\":%u}",
-                        (unsigned int)(xTaskGetTickCount() * portTICK_PERIOD_MS),
+                        (unsigned int)r->timestamp_ms,
                         r->ta, r->outside, r->center, r->inside, r->pixels);
     } else {
         return snprintf(buf, buflen,
                         "{\"ts\":%u,\"ta\":%.1f,\"detected\":false,\"pixels\":%u}",
-                        (unsigned int)(xTaskGetTickCount() * portTICK_PERIOD_MS),
+                        (unsigned int)r->timestamp_ms,
                         r->ta, r->pixels);
     }
 }
