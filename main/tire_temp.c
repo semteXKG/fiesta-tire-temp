@@ -1,5 +1,7 @@
 #include "tire_temp.h"
 #include "mlx90640.h"
+#include "tire_segment.h"
+#include "mqttcomm.h"
 #include "esp_log.h"
 #include "driver/i2c_master.h"
 #include "freertos/FreeRTOS.h"
@@ -75,14 +77,22 @@ static void tire_temp_task(void *pv)
             ESP_LOGI(TAG, "frame %d  Ta=%.1f  min=%.1f  max=%.1f  avg=%.1f",
                      frame_count++, ta, min, max, sum / MLX90640_PIXELS);
 
-            for (int row = 0; row < MLX90640_ROWS; row++) {
-                char line[256];
-                int pos = snprintf(line, sizeof(line), "row %02d:", row);
-                for (int col = 0; col < MLX90640_COLS && pos < (int)sizeof(line) - 8; col++) {
-                    pos += snprintf(line + pos, sizeof(line) - pos, " %.1f",
-                                    matrix[row * MLX90640_COLS + col]);
-                }
-                ESP_LOGI(TAG, "%s", line);
+            tire_segment_result_t seg;
+            err = tire_segment_process(matrix, ta, &seg);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "segmentation failed: %s", esp_err_to_name(err));
+                break;
+            }
+
+            seg.timestamp_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+            char json[256];
+            int len = tire_segment_json(&seg, json, sizeof(json));
+            if (len > 0 && len < (int)sizeof(json)) {
+                ESP_LOGI(TAG, "%s", json);
+                mqttcomm_publish("fiesta/tire-temp/tire-temp", json, len);
+            } else {
+                ESP_LOGE(TAG, "JSON encoding failed or truncated");
             }
 
             vTaskDelay(pdMS_TO_TICKS(POLL_PERIOD_MS));
