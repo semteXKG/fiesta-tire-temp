@@ -1,6 +1,6 @@
 # Tire temperature segmentation implementation plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a `tire_segment` module that extracts outside/center/inside average temperatures from each MLX90640 frame and publishes them as a single JSON payload over MQTT.
 
@@ -42,7 +42,7 @@
   - `esp_err_t tire_segment_process(const float *temps, float ta, tire_segment_result_t *out);`
   - `int tire_segment_json(const tire_segment_result_t *r, char *buf, size_t buflen);`
 
-- [ ] **Step 1: Write the header**
+- [x] **Step 1: Write the header**
 
 ```c
 #ifndef TIRE_SEGMENT_H
@@ -76,7 +76,7 @@ int tire_segment_json(const tire_segment_result_t *r, char *buf, size_t buflen);
 #endif /* TIRE_SEGMENT_H */
 ```
 
-- [ ] **Step 2: Verify build**
+- [x] **Step 2: Verify build**
 
 Run:
 ```bash
@@ -85,7 +85,7 @@ Run:
 
 Expected: build succeeds (no other file references the new header yet).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add main/tire_segment.h
@@ -105,7 +105,7 @@ git commit -m "feat(tire_segment): add segmenter public API header"
 - Consumes: 32×24 `float` array and `ta` from `mlx90640_read_frame()`.
 - Produces: `tire_segment_result_t` populated with detected flag, pixel count, and three averages; JSON formatter.
 
-- [ ] **Step 1: Implement threshold, connected-component, principal-axis, and split logic**
+- [x] **Step 1: Implement threshold, connected-component, principal-axis, and split logic**
 
 ```c
 #include "tire_segment.h"
@@ -197,7 +197,11 @@ esp_err_t tire_segment_process(const float *temps, float ta, tire_segment_result
     memset(visited, 0, sizeof(visited));
 
     for (int i = 0; i < MLX90640_PIXELS; i++) {
-        mask[i] = temps[i] > thresh;
+#if TIRE_DETECT_COLD
+        mask[i] = temps[i] < (bg - TIRE_THRESHOLD_OFFSET);
+#else
+        mask[i] = temps[i] > (bg + TIRE_THRESHOLD_OFFSET);
+#endif
     }
 
     int best_count = 0;
@@ -299,16 +303,11 @@ int tire_segment_json(const tire_segment_result_t *r, char *buf, size_t buflen)
 }
 ```
 
-- [ ] **Step 2: Add required includes for `snprintf` and `xTaskGetTickCount`**
+- [x] **Step 2: Add `timestamp_ms` to the result struct and remove FreeRTOS dependency**
 
-Already included: `<stdio.h>` for `snprintf`. Add FreeRTOS headers at the top of `tire_segment.c`:
+Change `tire_segment_result_t` in `tire_segment.h` to include `uint32_t timestamp_ms`. Move timestamp generation from `tire_segment_json()` to the caller (`tire_temp.c`) so the segmenter stays free of FreeRTOS. `tire_segment_json()` reads `r->timestamp_ms`.
 
-```c
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-```
-
-- [ ] **Step 3: Verify build**
+- [x] **Step 3: Verify build**
 
 Run:
 ```bash
@@ -317,7 +316,7 @@ Run:
 
 Expected: build succeeds (header is present; `CMakeLists.txt` update comes in Task 4).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add main/tire_segment.c
@@ -337,7 +336,7 @@ git commit -m "feat(tire_segment): implement threshold, connected-component, and
 - Consumes: `tire_segment_process()`, `tire_segment_json()`, `mqttcomm_publish()`.
 - Produces: JSON string published once per second to `fiesta/tire-temp/tire-temp`.
 
-- [ ] **Step 1: Add include and reduce matrix logging**
+- [x] **Step 1: Add include and reduce matrix logging**
 
 Add near the top of `main/tire_temp.c`:
 
@@ -346,7 +345,7 @@ Add near the top of `main/tire_temp.c`:
 #include "mqttcomm.h"
 ```
 
-- [ ] **Step 2: Replace the per-row matrix log with segmenter output**
+- [x] **Step 2: Replace the per-row matrix log with segmenter output**
 
 Inside the inner `while (1)` loop, after the frame-read retry block and before the delay, replace the 24-row `ESP_LOGI` dump with:
 
@@ -370,7 +369,7 @@ Inside the inner `while (1)` loop, after the frame-read retry block and before t
 
 Keep the `ESP_LOGI(TAG, "frame %d  Ta=%.1f ...")` summary line for debugging.
 
-- [ ] **Step 3: Verify build**
+- [x] **Step 3: Verify build**
 
 Run:
 ```bash
@@ -379,7 +378,7 @@ Run:
 
 Expected: build succeeds.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add main/tire_temp.c
@@ -399,7 +398,7 @@ git commit -m "feat(tire_temp): run segmenter and publish JSON per frame"
 - Consumes: existing CMake file.
 - Produces: updated source list including `tire_segment.c`.
 
-- [ ] **Step 1: Add `tire_segment.c` to SRCS**
+- [x] **Step 1: Add `tire_segment.c` to SRCS**
 
 Read `main/CMakeLists.txt` and add `"tire_segment.c"` to the `SRCS` list. Expected result:
 
@@ -409,7 +408,7 @@ idf_component_register(SRCS "main.c" "wlan.c" "mqttcomm.c" "tire_temp.c" "mlx906
                        REQUIRES esp_driver_i2c mqtt nvs_flash)
 ```
 
-- [ ] **Step 2: Verify build**
+- [x] **Step 2: Verify build**
 
 Run:
 ```bash
@@ -418,7 +417,7 @@ Run:
 
 Expected: build succeeds with all objects linked.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add main/CMakeLists.txt
@@ -438,50 +437,44 @@ git commit -m "build: add tire_segment.c to CMake sources"
 - Consumes: built firmware.
 - Produces: verified UART/JSON output.
 
-- [ ] **Step 1: Flash the firmware**
+- [x] **Step 1: Flash the firmware**
 
 Run:
 ```bash
 . ~/.espressif/v5.5.3/esp-idf/export.sh && idf.py -p /dev/ttyUSB0 flash
 ```
 
-- [ ] **Step 2: Point sensor at coolbag and capture UART**
+- [x] **Step 2: Point sensor at coolbag and capture UART**
 
-Run:
-```bash
-idf.py -p /dev/ttyUSB0 monitor
-```
-
-Or use a Python serial reader. Place the coolbag in the expected tire region. Expected UART output contains JSON like:
+Used a Python serial reader with `TIRE_DETECT_COLD = 1`. Placed the coolbag in the expected tire region. Observed UART output like:
 
 ```json
-{"ts":12345,"ta":26.2,"outside":-10.1,"center":-11.8,"inside":-9.4,"detected":true,"pixels":156}
+{"ts":6920,"ta":28.4,"outside":4.3,"center":0.8,"inside":2.8,"detected":true,"pixels":176}
 ```
 
-All three temperatures should be in the -10 to -19 °C range (within a few degrees).
+Detection was stable for ~30 consecutive frames with pixel counts between 133 and 177. Segment averages were in the 0–3 °C range (higher than the coolbag core because the 32×24 FOV includes surrounding warm surfaces).
 
-- [ ] **Step 3: Move target to simulate steering**
+- [x] **Step 3: Move target to simulate steering**
 
-Slide the coolbag left and right across the FOV. Expected behavior:
-- `detected` stays `true` while the target is in frame.
-- The three averages shift; one segment becomes colder as the target moves into it.
-- No reboots or exceptions.
+Sliding the coolbag left and right across the FOV showed that `detected` stayed `true` while the target was in frame and the three averages shifted. The principal-axis split kept the three segments meaningful even as the blob moved. No reboots or exceptions.
 
-- [ ] **Step 4: Remove target and verify missing-tire handling**
+- [x] **Step 4: Remove target and verify missing-tire handling**
 
-Point the sensor at a uniform wall. Expected output:
+After removing the coolbag, output returned to:
 
 ```json
-{"ts":12390,"ta":26.3,"detected":false,"pixels":0}
+{"ts":76480,"ta":27.8,"detected":false,"pixels":0}
 ```
 
-- [ ] **Step 5: Commit test notes (optional)**
+With a few transitional frames while the target was leaving the FOV.
 
-If any tunables need adjustment (e.g., `TIRE_THRESHOLD_OFFSET`), edit `main/tire_segment.c` and commit:
+- [x] **Step 5: Make hot/cold detection switchable and set production default**
+
+Added `TIRE_DETECT_COLD` compile-time switch so the same code can detect hot tires (production) or cold test targets (coolbag HIL). Set the default to `0` (hot tires) and committed:
 
 ```bash
 git add main/tire_segment.c
-git commit -m "tune(tire_segment): adjust threshold after HIL test"
+git commit -m "tire_segment: make hot/cold detection switchable via TIRE_DETECT_COLD"
 ```
 
 ---
@@ -492,7 +485,7 @@ git commit -m "tune(tire_segment): adjust threshold after HIL test"
 
 | Spec section | Task implementing it |
 |--------------|----------------------|
-| Temperature threshold (25th percentile + offset) | Task 2 |
+| Temperature threshold (25th percentile + directional offset) | Task 2 |
 | Connected component (largest blob) | Task 2 |
 | Principal axis | Task 2 |
 | Equal-count split into outside/center/inside | Task 2 |

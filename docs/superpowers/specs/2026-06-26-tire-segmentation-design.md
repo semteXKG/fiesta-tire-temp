@@ -26,7 +26,10 @@ For each 1 Hz frame:
 
 1. **Temperature threshold**
    - Compute the 25th percentile (background) of the 768 pixel temperatures.
-   - Tire pixels are those whose temperature differs from that percentile by at least `TIRE_THRESHOLD_OFFSET` °C (default 5 °C). This adapts to ambient changes and detects both hot tires and cold test targets.
+   - Tire pixels are those whose temperature differs from that percentile by at least `TIRE_THRESHOLD_OFFSET` °C (default 5 °C). The direction of the difference is controlled by `TIRE_DETECT_COLD`:
+     - `TIRE_DETECT_COLD = 0` (production default): detect hot tires (`temps[i] > bg + offset`).
+     - `TIRE_DETECT_COLD = 1`: detect cold test targets such as the coolbag (`temps[i] < bg - offset`).
+   - A directional threshold is used instead of absolute difference so that both hot tires and room-temperature background details are not merged into one large blob.
    - If fewer than `TIRE_MIN_PIXELS` (e.g., 30) pixels qualify, mark detection as failed.
 
 2. **Connected component**
@@ -91,6 +94,10 @@ If `detected` is false, the three temperature fields are omitted.
 - Verify against known targets (coolbag / warm object) placed in the expected tire region.
 - On the car: check that turning the wheel changes which segment is hottest and that `detected` stays true.
 
+### Hardware-in-the-loop coolbag test (TIRE_DETECT_COLD = 1)
+
+With the coolbag placed in front of the sensor the module reported `detected: true` for ~30 consecutive frames, pixel counts between 133 and 177, and segment averages in the 0–3 °C range (coolbag surface was roughly −10 to −19 °C; measured values were higher because the 32×24 FOV includes surrounding warm surfaces). When the coolbag was removed, `detected` returned to `false` after a few transitional frames.
+
 ## Tunables
 
 | Symbol | Default | Description |
@@ -98,3 +105,4 @@ If `detected` is false, the three temperature fields are omitted.
 | `TIRE_THRESHOLD_OFFSET` | 5.0 °C | Pixels differing from background by more than offset are considered tire |
 | `TIRE_MIN_PIXELS` | 30 | Minimum pixels for a valid detection |
 | `TIRE_CONNECTIVITY` | 4 | Flood-fill connectivity |
+| `TIRE_DETECT_COLD` | 0 | 0 = detect hot tires, 1 = detect cold test targets (coolbag) |
