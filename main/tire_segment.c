@@ -10,6 +10,11 @@
 #define TIRE_THRESHOLD_OFFSET   5.0f
 #define TIRE_MIN_PIXELS         30
 
+/* Set to 1 to detect cold test targets (e.g., coolbag). Default 0 detects hot tires. */
+#ifndef TIRE_DETECT_COLD
+#define TIRE_DETECT_COLD        0
+#endif
+
 typedef struct {
     float proj;
     float temp;
@@ -116,7 +121,11 @@ esp_err_t tire_segment_process(const float *temps, float ta, tire_segment_result
     memset(labels, 0, sizeof(labels));
 
     for (int i = 0; i < MLX90640_PIXELS; i++) {
-        mask[i] = fabsf(temps[i] - bg) > TIRE_THRESHOLD_OFFSET;
+#if TIRE_DETECT_COLD
+        mask[i] = temps[i] < (bg - TIRE_THRESHOLD_OFFSET);
+#else
+        mask[i] = temps[i] > (bg + TIRE_THRESHOLD_OFFSET);
+#endif
     }
 
     int best_count = 0;
