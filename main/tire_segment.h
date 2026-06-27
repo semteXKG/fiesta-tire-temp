@@ -22,6 +22,7 @@ typedef struct {
 
 esp_err_t tire_segment_process(const float *temps, float ta, tire_segment_result_t *out);
 int tire_segment_json(const tire_segment_result_t *r, char *buf, size_t buflen);
+int tire_segment_raw_json(uint32_t timestamp_ms, float ta, const float *pixels, size_t n, char *buf, size_t buflen);
 
 #ifdef __cplusplus
 }

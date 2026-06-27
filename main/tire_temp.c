@@ -8,6 +8,10 @@
 #include "freertos/task.h"
 #include <stdio.h>
 
+#ifndef DEVICE_LOCATION
+#define DEVICE_LOCATION "XX"
+#endif
+
 #define I2C_SDA_GPIO     21
 #define I2C_SCL_GPIO     22
 #define POLL_PERIOD_MS   1000
@@ -32,6 +36,7 @@ static void tire_temp_task(void *pv)
 
     static mlx90640_t sensor;
     static float matrix[MLX90640_PIXELS];
+    static char raw_json[5500];
     static int frame_count = 0;
 
     while (1) {
@@ -90,9 +95,17 @@ static void tire_temp_task(void *pv)
             int len = tire_segment_json(&seg, json, sizeof(json));
             if (len > 0 && len < (int)sizeof(json)) {
                 ESP_LOGI(TAG, "%s", json);
-                mqttcomm_publish("fiesta/tire-temp/tire-temp", json, len);
+                mqttcomm_publish("fiesta/tire-temp/" DEVICE_LOCATION, json, len);
             } else {
                 ESP_LOGE(TAG, "JSON encoding failed or truncated");
+            }
+
+            int raw_len = tire_segment_raw_json(seg.timestamp_ms, ta, matrix,
+                                                MLX90640_PIXELS, raw_json, sizeof(raw_json));
+            if (raw_len > 0 && raw_len < (int)sizeof(raw_json)) {
+                mqttcomm_publish("fiesta/tire-temp/" DEVICE_LOCATION "/raw", raw_json, raw_len);
+            } else {
+                ESP_LOGE(TAG, "raw JSON encoding failed or truncated");
             }
 
             vTaskDelay(pdMS_TO_TICKS(POLL_PERIOD_MS));

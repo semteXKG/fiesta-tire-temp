@@ -1,7 +1,11 @@
 #include "wlan.h"
 
-#define WLAN_SSID "fiesta-network"
-#define WLAN_PWD  "fiesta-network-123"
+#ifndef DEVICE_WLAN_SSID
+#define DEVICE_WLAN_SSID "fiesta-network"
+#endif
+#ifndef DEVICE_WLAN_PWD
+#define DEVICE_WLAN_PWD  "fiesta-network-123"
+#endif
 
 #define MAXIMUM_RETRY  3
 
@@ -64,8 +68,8 @@ static esp_err_t wifi_init_sta(void)
         },
     };
 
-    strcpy((char*)wifi_config.sta.ssid, WLAN_SSID);
-    strcpy((char*)wifi_config.sta.password, WLAN_PWD);
+    strcpy((char*)wifi_config.sta.ssid, DEVICE_WLAN_SSID);
+    strcpy((char*)wifi_config.sta.password, DEVICE_WLAN_PWD);
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
@@ -81,10 +85,10 @@ static esp_err_t wifi_init_sta(void)
             portMAX_DELAY);
 
     if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "connected to ap SSID:%s", WLAN_SSID);
+        ESP_LOGI(TAG, "connected to ap SSID:%s", DEVICE_WLAN_SSID);
         return ESP_OK;
     } else if (bits & WIFI_FAIL_BIT) {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s", WLAN_SSID);
+        ESP_LOGI(TAG, "Failed to connect to SSID:%s", DEVICE_WLAN_SSID);
     } else {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
     }

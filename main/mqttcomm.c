@@ -2,11 +2,17 @@
 #include "mqtt_client.h"
 #include "esp_log.h"
 
-#define BROKER_URI         "mqtt://broker:1883"
-#define CLIENT_ID          "tire-temp"
-#define STATUS_TOPIC       "fiesta/device/tire-temp/status"
-#define STATUS_ONLINE      "{\"status\":\"online\"}"
-#define STATUS_OFFLINE     "{\"status\":\"offline\"}"
+#ifndef DEVICE_MQTT_URI
+#define DEVICE_MQTT_URI "mqtt://broker:1883"
+#endif
+#ifndef DEVICE_LOCATION
+#define DEVICE_LOCATION "XX"
+#endif
+
+#define CLIENT_ID     "tire-temp-" DEVICE_LOCATION
+#define STATUS_TOPIC  "fiesta/device/tire-temp-" DEVICE_LOCATION "/status"
+#define STATUS_ONLINE  "{\"status\":\"online\"}"
+#define STATUS_OFFLINE "{\"status\":\"offline\"}"
 
 static const char* TAG = "mqttcomm";
 static esp_mqtt_client_handle_t client = NULL;
@@ -32,7 +38,7 @@ static void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_
 
 void mqttcomm_start(void) {
     const esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = BROKER_URI,
+        .broker.address.uri = DEVICE_MQTT_URI,
         .credentials.client_id = CLIENT_ID,
         .session.last_will = {
             .topic = STATUS_TOPIC,
@@ -43,7 +49,7 @@ void mqttcomm_start(void) {
         .network.reconnect_timeout_ms = 5000,
     };
 
-    ESP_LOGI(TAG, "Connecting to MQTT broker at %s", BROKER_URI);
+    ESP_LOGI(TAG, "Connecting to MQTT broker at %s", DEVICE_MQTT_URI);
     client = esp_mqtt_client_init(&mqtt_cfg);
     esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(client);

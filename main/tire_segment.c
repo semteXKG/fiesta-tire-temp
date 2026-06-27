@@ -215,6 +215,36 @@ esp_err_t tire_segment_process(const float *temps, float ta, tire_segment_result
     return ESP_OK;
 }
 
+int tire_segment_raw_json(uint32_t timestamp_ms, float ta, const float *pixels, size_t n, char *buf, size_t buflen)
+{
+    if (pixels == NULL || buf == NULL || buflen == 0) {
+        return -1;
+    }
+    int pos = snprintf(buf, buflen, "{\"ts\":%u,\"ta\":%.1f,\"pixels\":[",
+                       (unsigned int)timestamp_ms, ta);
+    if (pos < 0 || (size_t)pos >= buflen) {
+        return -1;
+    }
+    for (size_t i = 0; i < n; i++) {
+        int written = snprintf(buf + pos, buflen - pos, "%.1f", pixels[i]);
+        if (written < 0 || (size_t)(pos + written) >= buflen) {
+            return -1;
+        }
+        pos += written;
+        if (i + 1 < n) {
+            if ((size_t)pos + 1 >= buflen) {
+                return -1;
+            }
+            buf[pos++] = ',';
+        }
+    }
+    int tail = snprintf(buf + pos, buflen - pos, "]}");
+    if (tail < 0 || (size_t)(pos + tail) >= buflen) {
+        return -1;
+    }
+    return pos + tail;
+}
+
 int tire_segment_json(const tire_segment_result_t *r, char *buf, size_t buflen)
 {
     if (r == NULL || buf == NULL || buflen == 0) {
