@@ -225,13 +225,32 @@ int tire_segment_raw_json(uint32_t timestamp_ms, float ta, const float *pixels, 
     if (pos < 0 || (size_t)pos >= buflen) {
         return -1;
     }
-    for (size_t i = 0; i < n; i++) {
-        int written = snprintf(buf + pos, buflen - pos, "%.1f", pixels[i]);
+    for (int y = 0; y < MLX90640_ROWS; y++) {
+        int written = snprintf(buf + pos, buflen - pos, "[");
         if (written < 0 || (size_t)(pos + written) >= buflen) {
             return -1;
         }
         pos += written;
-        if (i + 1 < n) {
+        for (int x = 0; x < MLX90640_COLS; x++) {
+            float val = pixels[y * MLX90640_COLS + x];
+            written = snprintf(buf + pos, buflen - pos, "%.1f", val);
+            if (written < 0 || (size_t)(pos + written) >= buflen) {
+                return -1;
+            }
+            pos += written;
+            if (x + 1 < MLX90640_COLS) {
+                if ((size_t)pos + 1 >= buflen) {
+                    return -1;
+                }
+                buf[pos++] = ',';
+            }
+        }
+        written = snprintf(buf + pos, buflen - pos, "]");
+        if (written < 0 || (size_t)(pos + written) >= buflen) {
+            return -1;
+        }
+        pos += written;
+        if (y + 1 < MLX90640_ROWS) {
             if ((size_t)pos + 1 >= buflen) {
                 return -1;
             }
