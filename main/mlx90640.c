@@ -127,7 +127,7 @@ esp_err_t mlx90640_init(i2c_master_bus_handle_t bus, uint8_t addr, mlx90640_t *o
         return ESP_ERR_INVALID_RESPONSE;
     }
 
-    /* Set refresh rate to 1 Hz */
+    /* Set refresh rate to 64 Hz (max) */
     uint16_t ctrl;
     err = mlx90640_i2c_read(out, MLX90640_CTRL_REG, 1, &ctrl);
     if (err != ESP_OK) {
@@ -135,7 +135,7 @@ esp_err_t mlx90640_init(i2c_master_bus_handle_t bus, uint8_t addr, mlx90640_t *o
         return err;
     }
     ctrl &= MLX90640_CTRL_REFRESH_MASK;
-    ctrl |= ((uint16_t)1 << MLX90640_CTRL_REFRESH_SHIFT);
+    ctrl |= ((uint16_t)7 << MLX90640_CTRL_REFRESH_SHIFT);
     err = mlx90640_i2c_write(out, MLX90640_CTRL_REG, ctrl);
     if (err != ESP_OK) {
         i2c_master_bus_rm_device(out->dev);

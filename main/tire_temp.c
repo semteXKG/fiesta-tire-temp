@@ -14,7 +14,7 @@
 
 #define I2C_SDA_GPIO     21
 #define I2C_SCL_GPIO     22
-#define POLL_PERIOD_MS   1000
+#define POLL_PERIOD_MS   0
 #define SENSOR_ADDR      0x33
 #define EMISSIVITY       0.95f
 #define REFLECTED_TEMP_C 25.0f
