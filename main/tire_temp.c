@@ -37,6 +37,8 @@ static void tire_temp_task(void *pv)
     static mlx90640_t sensor;
     static float matrix[MLX90640_PIXELS];
     static char raw_json[5500];
+    static char seg_json[5500];
+    static uint8_t zone_labels[MLX90640_PIXELS];
     static int frame_count = 0;
 
     while (1) {
@@ -83,7 +85,7 @@ static void tire_temp_task(void *pv)
                      frame_count++, ta, min, max, sum / MLX90640_PIXELS);
 
             tire_segment_result_t seg;
-            err = tire_segment_process(matrix, ta, &seg);
+            err = tire_segment_process(matrix, ta, zone_labels, &seg);
             if (err != ESP_OK) {
                 ESP_LOGE(TAG, "segmentation failed: %s", esp_err_to_name(err));
                 break;
@@ -106,6 +108,15 @@ static void tire_temp_task(void *pv)
                 mqttcomm_publish("fiesta/tire-temp/" DEVICE_LOCATION "/raw", raw_json, raw_len);
             } else {
                 ESP_LOGE(TAG, "raw JSON encoding failed or truncated");
+            }
+
+            int seg_len = tire_segment_labels_json(seg.timestamp_ms, seg.detected,
+                                                   seg.pixels, zone_labels,
+                                                   seg_json, sizeof(seg_json));
+            if (seg_len > 0 && seg_len < (int)sizeof(seg_json)) {
+                mqttcomm_publish("fiesta/tire-temp/" DEVICE_LOCATION "/seg", seg_json, seg_len);
+            } else {
+                ESP_LOGE(TAG, "seg JSON encoding failed or truncated");
             }
 
             vTaskDelay(pdMS_TO_TICKS(POLL_PERIOD_MS));
