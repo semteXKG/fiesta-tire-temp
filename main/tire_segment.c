@@ -18,6 +18,7 @@
 typedef struct {
     float proj;
     float temp;
+    int   idx;
 } proj_t;
 
 /*
@@ -106,7 +107,8 @@ static void label_component(int w, int h, int sx, int sy, int16_t label,
     *count = (int)cnt;
 }
 
-esp_err_t tire_segment_process(const float *temps, float ta, tire_segment_result_t *out)
+esp_err_t tire_segment_process(const float *temps, float ta,
+                               uint8_t *out_labels, tire_segment_result_t *out)
 {
     if (temps == NULL || out == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -114,6 +116,10 @@ esp_err_t tire_segment_process(const float *temps, float ta, tire_segment_result
 
     memset(out, 0, sizeof(*out));
     out->ta = ta;
+
+    if (out_labels != NULL) {
+        memset(out_labels, 0, MLX90640_PIXELS);
+    }
 
     memcpy(sorted, temps, sizeof(sorted));
     float bg = percentile25(sorted, MLX90640_PIXELS);
@@ -185,6 +191,7 @@ esp_err_t tire_segment_process(const float *temps, float ta, tire_segment_result
                 float dy = (float)y - (float)best_cy;
                 projs[n].proj = dx * ux + dy * uy;
                 projs[n].temp = temps[idx];
+                projs[n].idx  = idx;
                 n++;
             }
         }
@@ -211,6 +218,13 @@ esp_err_t tire_segment_process(const float *temps, float ta, tire_segment_result
     out->outside = sum_out / (float)n1;
     out->center = sum_cen / (float)(n2 - n1);
     out->inside = sum_in / (float)(n - n2);
+
+    if (out_labels != NULL) {
+        for (int i = 0; i < n; i++) {
+            uint8_t zone = (i < n1) ? 1u : (i < n2) ? 2u : 3u;
+            out_labels[projs[i].idx] = zone;
+        }
+    }
 
     return ESP_OK;
 }

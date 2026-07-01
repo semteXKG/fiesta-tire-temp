@@ -20,9 +20,13 @@ typedef struct {
     uint32_t timestamp_ms;  /**< timestamp in milliseconds, populated by the caller */
 } tire_segment_result_t;
 
-esp_err_t tire_segment_process(const float *temps, float ta, tire_segment_result_t *out);
+esp_err_t tire_segment_process(const float *temps, float ta,
+                               uint8_t *out_labels, tire_segment_result_t *out);
 int tire_segment_json(const tire_segment_result_t *r, char *buf, size_t buflen);
-int tire_segment_raw_json(uint32_t timestamp_ms, float ta, const float *pixels, size_t n, char *buf, size_t buflen);
+int tire_segment_raw_json(uint32_t timestamp_ms, float ta, const float *pixels,
+                          size_t n, char *buf, size_t buflen);
+int tire_segment_labels_json(uint32_t timestamp_ms, bool detected, uint16_t pixels,
+                             const uint8_t *labels, char *buf, size_t buflen);
 
 #ifdef __cplusplus
 }
