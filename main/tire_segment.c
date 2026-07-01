@@ -229,6 +229,65 @@ esp_err_t tire_segment_process(const float *temps, float ta,
     return ESP_OK;
 }
 
+int tire_segment_labels_json(uint32_t timestamp_ms, bool detected, uint16_t pixels,
+                             const uint8_t *labels, char *buf, size_t buflen)
+{
+    if (buf == NULL || buflen == 0) {
+        return -1;
+    }
+    if (detected && labels == NULL) {
+        return -1;
+    }
+
+    int pos = snprintf(buf, buflen,
+                       "{\"ts\":%u,\"detected\":%s,\"pixels\":%u,\"labels\":[",
+                       (unsigned int)timestamp_ms,
+                       detected ? "true" : "false",
+                       (unsigned int)pixels);
+    if (pos < 0 || (size_t)pos >= buflen) {
+        return -1;
+    }
+
+    for (int y = 0; y < MLX90640_ROWS; y++) {
+        int written = snprintf(buf + pos, buflen - pos, "[");
+        if (written < 0 || (size_t)(pos + written) >= buflen) {
+            return -1;
+        }
+        pos += written;
+        for (int x = 0; x < MLX90640_COLS; x++) {
+            int v = (labels != NULL) ? (int)labels[y * MLX90640_COLS + x] : 0;
+            written = snprintf(buf + pos, buflen - pos, "%d", v);
+            if (written < 0 || (size_t)(pos + written) >= buflen) {
+                return -1;
+            }
+            pos += written;
+            if (x + 1 < MLX90640_COLS) {
+                if ((size_t)pos + 1 >= buflen) {
+                    return -1;
+                }
+                buf[pos++] = ',';
+            }
+        }
+        written = snprintf(buf + pos, buflen - pos, "]");
+        if (written < 0 || (size_t)(pos + written) >= buflen) {
+            return -1;
+        }
+        pos += written;
+        if (y + 1 < MLX90640_ROWS) {
+            if ((size_t)pos + 1 >= buflen) {
+                return -1;
+            }
+            buf[pos++] = ',';
+        }
+    }
+
+    int tail = snprintf(buf + pos, buflen - pos, "]}");
+    if (tail < 0 || (size_t)(pos + tail) >= buflen) {
+        return -1;
+    }
+    return pos + tail;
+}
+
 int tire_segment_raw_json(uint32_t timestamp_ms, float ta, const float *pixels, size_t n, char *buf, size_t buflen)
 {
     if (pixels == NULL || buf == NULL || buflen == 0) {
